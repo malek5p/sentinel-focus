@@ -35,8 +35,7 @@ if not os.path.exists(MODEL_PATH):
     urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
     print("✅ DNN model downloaded.")
 
-face_net = cv2.dnn.readNet(model=MODEL_PATH, config=PROTO_PATH)
-
+face_net = cv2.dnn.readNetFromCaffe(PROTO_PATH, MODEL_PATH)
 # ─── Profile Cascade كـ backup للكشف الجانبي لو DNN ما أمسكوش ─────────────────
 profile_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + 'haarcascade_profileface.xml'
