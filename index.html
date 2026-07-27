@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel Focus - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+
+        <header class="header">
+            <div class="header-top">
+                <div class="titles">
+                    <h1>SENTINEL FOCUS</h1>
+                    <p>Your AI Study Guardian • Monk Mode Activated</p>
+                </div>
+                <button id="theme-toggle" class="theme-btn">🌙 Dark Mode</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+
+            <div class="left-panel">
+
+                <div class="current-session">
+                    <h3>Current Session</h3>
+                    <div class="timer" id="timer-display">00:00:00</div>
+                    <p id="pomodoro-phase-label"
+                       style="display:none; text-align:center; font-size:0.8rem;
+                              margin-top:8px; letter-spacing:1px;">
+                        WORK PHASE
+                    </p>
+                </div>
+
+                <div class="statistics">
+                    <h4>Focus Statistics</h4>
+
+                    <div style="margin-bottom:15px; padding-bottom:12px;
+                                border-bottom:1px solid var(--border-color);">
+                        <div style="display:flex; align-items:center;
+                                    gap:8px; margin-bottom:8px;">
+                            <input type="checkbox" id="pomodoro-toggle"
+                                   style="cursor:pointer; width:15px; height:15px;">
+                            <label for="pomodoro-toggle" class="pomo-label"
+                                   style="font-size:0.82rem; cursor:pointer;">
+                                Pomodoro Mode
+                            </label>
+                        </div>
+                        <select id="pomodoro-preset" disabled
+                                style="width:100%; padding:6px 8px; border-radius:5px;
+                                       border:1px solid var(--border-color); background:var(--bg-color);
+                                       color:var(--text-main); font-size:0.8rem; cursor:pointer;">
+                            <option value="25-5">25 / 5 — Classic</option>
+                            <option value="45-15">45 / 15</option>
+                            <option value="50-10">50 / 10</option>
+                            <option value="90-20">90 / 20</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-items">
+                        <div class="stat-item-row">
+                            <span class="label">Rounds Completed:</span>
+                            <span class="value" id="stat-rounds">0</span>
+                        </div>
+                        <div class="stat-item-row">
+                            <span class="label">Total Study Time:</span>
+                            <span class="value" id="stat-total-work">00:00 hrs</span>
+                        </div>
+                        <div class="stat-item-row">
+                            <span class="label">Distractions:</span>
+                            <span class="value" id="stat-distractions">0</span>
+                        </div>
+                        <div class="stat-item-row">
+                            <span class="label">Focus Score:</span>
+                            <span class="value" id="stat-focus-score">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="camera-feed-box" id="camera-feed">
+                <span class="live-tag">LIVE AI FEED</span>
+
+                <p id="ai-status-text"
+                   style="color:#FAF6F0; text-align:center; margin-bottom:10px;">
+                    Sentinel Standby...
+                </p>
+
+                <div class="placeholder-text" id="placeholder-text">
+                    <p>[ CAMERA FEED ]</p>
+                    <p>MediaPipe Face Detection</p>
+                </div>
+
+                <div id="session-summary"
+                     style="display:none; position:absolute; top:50%; left:50%;
+                            transform:translate(-50%,-50%); z-index:20;
+                            background:rgba(0,0,0,0.85); padding:25px 30px;
+                            border-radius:8px; width:80%; text-align:center;
+                            color:#FAF6F0;">
+                    <p style="font-size:0.75rem; color:#aaa;
+                               margin-bottom:8px; letter-spacing:2px;">
+                        SESSION COMPLETE
+                    </p>
+                    <p style="font-size:2.2rem; font-weight:bold; margin:0;"
+                       id="summary-time">00:00:00</p>
+                    <p style="font-size:0.85rem; margin-top:10px; color:#ccc;"
+                       id="summary-details"></p>
+                </div>
+            </div>
+
+        </main>
+
+        <footer class="footer">
+            <button class="settings-btn" id="pause-btn"
+                    style="display:none;">PAUSE</button>
+            <button class="start-session-btn" id="start-btn">START SESSION</button>
+        </footer>
+
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
