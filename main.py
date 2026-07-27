@@ -4,17 +4,15 @@ import urllib.request
 
 import cv2
 import numpy as np
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from flask import render_template # اتأكد إن render_template متناذية فوق
+
+app = Flask(__name__, static_url_path='', static_folder='.')
+CORS(app)
 
 @app.route('/')
 def home():
-    return send_file('index.html')('index.html')
-
-app = Flask(__name__)
-CORS(app)
-
+    return send_file('index.html')
 # ─── تحميل موديل DNN (أدق بكتير من Haar Cascade) ─────────────────────────────
 # ✅ FIX: DNN بيديك دقة 95%+ بدل Haar اللي بيفشل في الإضاءة الضعيفة أو الزاوية
 PROTO_PATH = "deploy.prototxt"
