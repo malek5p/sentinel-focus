@@ -6,6 +6,11 @@ import cv2
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask import render_template # اتأكد إن render_template متناذية فوق
+
+@app.route('/')
+def home():
+    return send_file('index.html')('index.html')
 
 app = Flask(__name__)
 CORS(app)
