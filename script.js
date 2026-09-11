@@ -18,16 +18,28 @@ window.addEventListener('load', () => {
     const statTotalWork    = document.getElementById('stat-total-work');
     const statDistractions = document.getElementById('stat-distractions');
     const statFocusScore   = document.getElementById('stat-focus-score');
+    const themeToggle      = document.getElementById('theme-toggle');  // ← الزرار الصح
 
-    // ─── ✅ الإصلاح الأساسي: URL نسبي بدل 127.0.0.1 ─────────────────────────
-    // لو شغّال local → /detect_face بيروح لـ 127.0.0.1 تلقائياً
-    // لو على Render   → /detect_face بيروح لـ sentinel-focus.onrender.com تلقائياً
-    const BACKEND_URL = '/detect_face';
+    const BACKEND_URL  = '/detect_face';
+    const FETCH_TIMEOUT = 4000;
+
+    // ─── Dark Mode ────────────────────────────────────────────────────────────
+    // الـ CSS variables موجودة في style.css — بس نضيف class على body
+    const savedTheme = localStorage.getItem('sentinel-theme');
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        themeToggle.innerText = '☀️ Light Mode';
+    }
+
+    themeToggle.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle('dark-mode');
+        themeToggle.innerText = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        localStorage.setItem('sentinel-theme', isDark ? 'dark' : 'light');
+    });
 
     // ─── إعدادات الكاميرا ────────────────────────────────────────────────────
     cameraBox.style.position = 'relative';
     cameraBox.style.overflow = 'hidden';
-    cameraBox.style.height   = '350px';
 
     videoElement.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:1;';
     videoElement.setAttribute('autoplay', '');
@@ -36,10 +48,9 @@ window.addEventListener('load', () => {
     videoElement.muted = true;
     cameraBox.appendChild(videoElement);
 
-    // ─── Canvas مصغّر 160x120 للسرعة ─────────────────────────────────────────
     const hiddenCanvas  = document.createElement('canvas');
-    hiddenCanvas.width  = 160;
-    hiddenCanvas.height = 120;
+    hiddenCanvas.width  = 320;
+    hiddenCanvas.height = 240;
     const hiddenCtx     = hiddenCanvas.getContext('2d');
 
     statusText.style.cssText = 'position:absolute;bottom:15px;left:0;right:0;text-align:center;z-index:10;font-size:0.85rem;padding:5px;background:rgba(0,0,0,0.45);';
@@ -47,7 +58,24 @@ window.addEventListener('load', () => {
     // ─── زرار "أنا مركّز" ────────────────────────────────────────────────────
     const focusedBtn = document.createElement('button');
     focusedBtn.innerText = '✅ أنا مركّز يا عم';
-    focusedBtn.style.cssText = 'display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;padding:14px 28px;font-size:1.1rem;font-weight:bold;background:#1a472a;color:#90EE90;border:2px solid #90EE90;border-radius:10px;cursor:pointer;box-shadow:0 0 18px rgba(144,238,144,0.45);';
+    focusedBtn.style.cssText = [
+        'display:none',
+        'position:absolute',
+        'top:50%',
+        'left:50%',
+        'transform:translate(-50%,-50%)',
+        'z-index:99999',
+        'padding:14px 28px',
+        'font-size:1.1rem',
+        'font-weight:bold',
+        'background:#1a472a',
+        'color:#90EE90',
+        'border:2px solid #90EE90',
+        'border-radius:10px',
+        'cursor:pointer',
+        'box-shadow:0 0 18px rgba(144,238,144,0.45)',
+        'white-space:nowrap'
+    ].join(';');
     cameraBox.appendChild(focusedBtn);
 
     focusedBtn.addEventListener('click', (e) => {
@@ -56,6 +84,7 @@ window.addEventListener('load', () => {
         playFocusReturnChime();
         detectionHistory = Array(WINDOW_SECS).fill(true);
         framesSeen = framesTotal = 0;
+        lastFocused = true;
         setStatus('FOCUSED — Sentinel Watching.', '#FAF6F0');
         cameraBox.style.outline = 'none';
         focusedBtn.style.display = 'none';
@@ -68,13 +97,14 @@ window.addEventListener('load', () => {
     let localStream      = null;
     let audioCtx         = null;
     let isFetching       = false;
+    let lastFocused      = true;
+    let lastReason       = '';
 
     let framesSeen       = 0;
     let framesTotal      = 0;
     let detectionHistory = [];
-    let lastReason       = '';
 
-    const WINDOW_SECS  = 20;
+    const WINDOW_SECS  = 12;
     const ABSENT_RATIO = 0.75;
     const GRACE_PERIOD = 3;
 
@@ -101,10 +131,7 @@ window.addEventListener('load', () => {
         secs === 0 ? 100 : Math.max(0, Math.round(100 - (distracts / (secs / 3600)) * 10));
 
     function setStatus(msg, color) {
-        if (statusText) {
-            statusText.innerText   = msg;
-            statusText.style.color = color || '#FAF6F0';
-        }
+        if (statusText) { statusText.innerText = msg; statusText.style.color = color || '#FAF6F0'; }
     }
 
     function setStatusByReason(reason) {
@@ -118,7 +145,6 @@ window.addEventListener('load', () => {
         }
     }
 
-    // ─── loadPreset ──────────────────────────────────────────────────────────
     function loadPreset() {
         const parts = pomodoroPreset.value.split('-').map(Number);
         WORK_TIME  = parts[0] * 60;
@@ -129,24 +155,21 @@ window.addEventListener('load', () => {
         timerElement.innerText = pomodoroMode ? formatMM(WORK_TIME) : '00:00:00';
     }
 
-    // ─── تفعيل/إلغاء البومودورو ───────────────────────────────────────────────
     pomodoroToggle.addEventListener('change', () => {
         if (sessionActive) return;
         pomodoroMode = pomodoroToggle.checked;
         pomodoroPreset.disabled = !pomodoroMode;
         if (pomodoroMode) {
-            loadPreset();
-            updateTimerDisplay();
+            loadPreset(); updateTimerDisplay();
             pomodoroLabel.style.display = 'block';
             pomodoroLabel.innerText     = '💪 WORK';
-            pomodoroLabel.style.color   = '#FAF6F0';
+            pomodoroLabel.style.color   = 'var(--text-main)';
         } else {
             timerElement.innerText      = '00:00:00';
             pomodoroLabel.style.display = 'none';
         }
     });
 
-    // ─── تغيير الـ preset: يحدّث العرض فوراً ────────────────────────────────
     pomodoroPreset.addEventListener('change', () => {
         if (sessionActive) return;
         loadPreset();
@@ -156,8 +179,8 @@ window.addEventListener('load', () => {
     // ─── Audio ────────────────────────────────────────────────────────────────
     function ensureAudio() {
         if (!audioCtx) return false;
-        if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-        return audioCtx.state !== 'closed';
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return true;
     }
 
     function beep(freq, dur, delayMs = 0) {
@@ -168,7 +191,7 @@ window.addEventListener('load', () => {
             const g   = audioCtx.createGain();
             osc.connect(g); g.connect(audioCtx.destination);
             osc.type = 'square'; osc.frequency.value = freq;
-            g.gain.setValueAtTime(0.3, t);
+            g.gain.setValueAtTime(0.4, t);
             g.gain.exponentialRampToValueAtTime(0.001, t + dur);
             osc.start(t); osc.stop(t + dur + 0.05);
         } catch (e) {}
@@ -180,15 +203,17 @@ window.addEventListener('load', () => {
         segmentDistracts++;
         statDistractions.innerText = segmentDistracts;
         focusedBtn.style.display   = 'block';
-        if (reason === 'phone') {
-            beep(1200,0.2,0); beep(800,0.2,200); beep(1200,0.2,400);
-        } else {
-            beep(880, 0.15);
-        }
+        if (audioCtx) audioCtx.resume().then(() => {
+            if (reason === 'phone') {
+                beep(1200,0.2,0); beep(800,0.2,200); beep(1200,0.2,400);
+            } else {
+                beep(880,0.2,0); beep(880,0.2,300);
+            }
+        });
         alarmIntervalId = setInterval(() => {
             if (!isAlertActive) { stopAlarm(); return; }
-            beep(880, 0.15);
-        }, 600);
+            if (audioCtx) audioCtx.resume().then(() => beep(880, 0.15));
+        }, 700);
     }
 
     function stopAlarm() {
@@ -197,40 +222,62 @@ window.addEventListener('load', () => {
         focusedBtn.style.display = 'none';
     }
 
-    function playFocusReturnChime() { beep(523,0.15,0); beep(659,0.15,150); beep(784,0.25,300); }
-    function playPhaseChime()       { beep(600,0.3,0);  beep(900,0.3,300); }
+    function playFocusReturnChime() {
+        if (audioCtx) audioCtx.resume().then(() => {
+            beep(523,0.15,0); beep(659,0.15,150); beep(784,0.25,300);
+        });
+    }
+    function playPhaseChime() {
+        if (audioCtx) audioCtx.resume().then(() => {
+            beep(600,0.3,0); beep(900,0.3,300);
+        });
+    }
+
+    // ─── fetch مع timeout ────────────────────────────────────────────────────
+    function fetchWithTimeout(url, options, ms) {
+        return Promise.race([
+            fetch(url, options),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+        ]);
+    }
 
     // ─── إرسال الفريم للـ Backend ─────────────────────────────────────────────
     async function checkFaceWithBackend() {
         if (!sessionActive || sessionPaused) return;
         if (pomodoroMode && pomodoroPhase === 'break') return;
-        if (isFetching) return;
+
+        if (isFetching) {
+            // لو في request شغّال استخدم آخر نتيجة بدل ما نتجاهل الفريم
+            framesTotal++;
+            if (lastFocused) framesSeen++;
+            return;
+        }
 
         isFetching = true;
         hiddenCtx.drawImage(videoElement, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-        const dataUrl = hiddenCanvas.toDataURL('image/jpeg', 0.3);
+        const dataUrl = hiddenCanvas.toDataURL('image/jpeg', 0.4);
 
         try {
-            const res    = await fetch(BACKEND_URL, {   // ← URL النسبي هنا
+            const res    = await fetchWithTimeout(BACKEND_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image: dataUrl })
-            });
+            }, FETCH_TIMEOUT);
             const result = await res.json();
 
+            lastFocused = result.focused;
+            lastReason  = result.reason || '';
             framesTotal++;
-            lastReason = result.reason || '';
             if (result.focused) {
                 framesSeen++;
             } else {
                 setStatusByReason(result.reason);
                 cameraBox.style.outline = result.reason === 'phone'
-                    ? '3px solid #FF6B00'
-                    : '3px solid #FF4444';
+                    ? '3px solid #FF6B00' : '3px solid #FF4444';
             }
         } catch (err) {
-            console.error('Backend Error:', err);
-            setStatus('❌ Backend Error', '#FF4444');
+            framesTotal++;
+            if (lastFocused) framesSeen++;
         } finally {
             isFetching = false;
         }
@@ -238,7 +285,6 @@ window.addEventListener('load', () => {
 
     function sampleAndCheck() {
         if (!sessionActive || sessionPaused) return;
-
         if (pomodoroMode && pomodoroPhase === 'break') {
             framesSeen = framesTotal = 0;
             if (isAlertActive) stopAlarm();
@@ -282,7 +328,6 @@ window.addEventListener('load', () => {
 
     function updateTimer() {
         if (sessionPaused) return;
-
         checkFaceWithBackend().then(() => { sampleAndCheck(); });
 
         if (pomodoroMode) {
@@ -313,7 +358,7 @@ window.addEventListener('load', () => {
             totalRounds++;
             statRounds.innerText      = totalRounds;
             pomodoroLabel.innerText   = '💪 WORK';
-            pomodoroLabel.style.color = '#FAF6F0';
+            pomodoroLabel.style.color = 'var(--text-main)';
             setStatus('FOCUSED — Sentinel Watching.', '#FAF6F0');
             resetDetection();
         }
@@ -324,8 +369,9 @@ window.addEventListener('load', () => {
         framesSeen = framesTotal = 0;
         detectionHistory = Array(WINDOW_SECS).fill(true);
         sessionStartTime = Date.now();
-        isFetching = false;
-        lastReason = '';
+        isFetching  = false;
+        lastFocused = true;
+        lastReason  = '';
     }
 
     pauseBtn.addEventListener('click', () => {
@@ -347,6 +393,7 @@ window.addEventListener('load', () => {
     startBtn.addEventListener('click', () => {
         if (!sessionActive) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            audioCtx.resume();
 
             navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
                 .then(stream => {
@@ -355,15 +402,14 @@ window.addEventListener('load', () => {
                     videoElement.play();
 
                     pomodoroMode = pomodoroToggle.checked;
-
                     if (pomodoroMode) {
                         loadPreset();
-                        pomodoroPhase = 'work';         // ← دايماً يبدأ بـ WORK
-                        pomodoroLeft  = WORK_TIME;      // ← الوقت الكامل من الأول
+                        pomodoroPhase = 'work';
+                        pomodoroLeft  = WORK_TIME;
                         timerElement.innerText      = formatMM(WORK_TIME);
                         pomodoroLabel.style.display = 'block';
                         pomodoroLabel.innerText     = '💪 WORK';
-                        pomodoroLabel.style.color   = '#FAF6F0';
+                        pomodoroLabel.style.color   = 'var(--text-main)';
                     } else {
                         pomodoroPhase          = 'work';
                         timerElement.innerText = '00:00:00';
@@ -387,8 +433,8 @@ window.addEventListener('load', () => {
                     setStatus('Sentinel: Initializing...', '#FFD580');
                 })
                 .catch(err => {
-                    console.error('Camera access blocked:', err);
-                    alert('يرجى السماح بالوصول إلى الكاميرا لتشغيل النظام.');
+                    console.error('Camera error:', err);
+                    alert('يرجى السماح بالوصول إلى الكاميرا.');
                 });
 
         } else {
