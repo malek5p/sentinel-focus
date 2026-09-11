@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel Focus - Dashboard</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <!-- ✅ حذفنا mediapipe scripts — مش محتاجينها، الكشف بقى في الـ backend -->
 </head>
 <body>
     <div class="dashboard-container">
@@ -51,8 +50,10 @@
                         </div>
                         <select id="pomodoro-preset" disabled
                                 style="width:100%; padding:6px 8px; border-radius:5px;
-                                       border:1px solid var(--border-color); background:var(--bg-color);
-                                       color:var(--text-main); font-size:0.8rem; cursor:pointer;">
+                                       border:1px solid var(--border-color);
+                                       background:var(--bg-color);
+                                       color:var(--text-main);
+                                       font-size:0.8rem; cursor:pointer;">
                             <option value="25-5">25 / 5 — Classic</option>
                             <option value="45-15">45 / 15</option>
                             <option value="50-10">50 / 10</option>
@@ -91,7 +92,7 @@
 
                 <div class="placeholder-text" id="placeholder-text">
                     <p>[ CAMERA FEED ]</p>
-                    <p>MediaPipe Face Detection</p>
+                    <p>OpenCV Face Detection</p>
                 </div>
 
                 <div id="session-summary"
@@ -114,8 +115,7 @@
         </main>
 
         <footer class="footer">
-            <button class="settings-btn" id="pause-btn"
-                    style="display:none;">PAUSE</button>
+            <button class="settings-btn" id="pause-btn" style="display:none;">PAUSE</button>
             <button class="start-session-btn" id="start-btn">START SESSION</button>
         </footer>
 
