@@ -16,50 +16,56 @@ profile_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_profileface.xml"
 )
 
+# CLAHE بيتعمل مرة واحدة بس — أسرع وأحسن من equalizeHist
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
 phone_confirm_count = 0
 PHONE_THRESHOLD     = 3
 frame_counter       = 0
 
 
 def preprocess(gray):
-    """
-    تحسين الصورة لأي جودة كاميرا:
-    1. تصغير لـ 320px لو أكبر (بس مش upscale لو أصغر)
-    2. denoising للضوضاء في الكاميرات الضعيفة
-    3. equalizeHist لتحسين التباين والإضاءة
-    4. sharpen خفيف لتوضيح ملامح الوجه
-    """
+    """تحسين سريع — بدون denoising عشان متعملش timeout"""
     h, w = gray.shape
-
-    # بس نصغّر لو أكبر من 320 — مش نكبّر لو أصغر (upscale بيخرب)
+    # بس نصغّر لو أكبر من 320 — ماننفعش نكبّر
     if w > 320:
-        scale    = 320 / w
-        gray     = cv2.resize(gray, (320, int(h * scale)), interpolation=cv2.INTER_AREA)
-
-    # denoising خفيف — بيساعد الكاميرات الضعيفة والإضاءة الوحشة
-    # h=8 قيمة متوازنة: كافية للضوضاء بدون ما تمسح التفاصيل
-    gray = cv2.fastNlMeansDenoising(gray, h=8, templateWindowSize=7, searchWindowSize=15)
-
-    # تحسين التباين
-    gray = cv2.equalizeHist(gray)
-
-    # sharpen خفيف لتوضيح حواف الوجه
-    kernel = np.array([[0, -0.5, 0],
-                       [-0.5, 3, -0.5],
-                       [0, -0.5, 0]])
-    gray = cv2.filter2D(gray, -1, kernel)
-    gray = np.clip(gray, 0, 255).astype(np.uint8)
-
+        scale = 320 / w
+        gray  = cv2.resize(gray, (320, int(h * scale)), interpolation=cv2.INTER_AREA)
+    # CLAHE أحسن من equalizeHist خصوصاً للإضاءة الغير منتظمة
+    gray = clahe.apply(gray)
     return gray
 
 
+def detect_sideways(gray):
+    """
+    كشف النظر يمين أو شمال — بإعدادات حساسة جداً
+    minNeighbors=1 و scaleFactor=1.1 عشان ميفوتوش حاجة
+    """
+    # يمين
+    p_right = profile_cascade.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=1, minSize=(20, 20)
+    )
+    if len(p_right) > 0:
+        return True
+
+    # شمال
+    flipped = cv2.flip(gray, 1)
+    p_left  = profile_cascade.detectMultiScale(
+        flipped, scaleFactor=1.1, minNeighbors=1, minSize=(20, 20)
+    )
+    if len(p_left) > 0:
+        return True
+
+    return False
+
+
 def detect_phone(gray):
-    small = cv2.resize(gray, (160, 120))
-    sh, sw = small.shape
-    blurred  = cv2.GaussianBlur(small, (3, 3), 0)
-    edges    = cv2.Canny(blurred, 50, 150)
+    small   = cv2.resize(gray, (160, 120))
+    sh, sw  = small.shape
+    blurred = cv2.GaussianBlur(small, (3, 3), 0)
+    edges   = cv2.Canny(blurred, 50, 150)
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    frame_area = sh * sw
+    frame_area  = sh * sw
     for cnt in contours:
         area = cv2.contourArea(cnt)
         if area < frame_area * 0.03 or area > frame_area * 0.35:
@@ -71,7 +77,7 @@ def detect_phone(gray):
         x, y, w, h = cv2.boundingRect(approx)
         if h == 0:
             continue
-        ar = w / h
+        ar             = w / h
         is_phone_shape = (0.40 <= ar <= 0.65) or (1.50 <= ar <= 2.50)
         not_top        = (y + h // 2) > sh * 0.20
         if is_phone_shape and not_top:
@@ -100,11 +106,9 @@ def detect_face():
             return jsonify({"focused": True, "reason": "decode_failed"})
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        # ─── تحسين الصورة لأي جودة كاميرا ───────────────────────────────────
         gray = preprocess(gray)
 
-        # ─── كشف التليفون كل 3 frames ─────────────────────────────────────────
+        # ─── 1. تليفون؟ كل 3 frames ──────────────────────────────────────────
         frame_counter += 1
         if frame_counter % 3 == 0:
             if detect_phone(gray):
@@ -115,27 +119,18 @@ def detect_face():
         if phone_confirm_count >= PHONE_THRESHOLD:
             return jsonify({"focused": False, "reason": "phone"})
 
-        # ─── scaleFactor=1.2 أدق من 1.3 — مهم للكاميرات الضعيفة ─────────────
-        # minSize=(25,25) يلتقط وجوه صغيرة في صور منخفضة الجودة
+        # ─── 2. وجه أمامي = مركّز ✅ ──────────────────────────────────────────
         frontal = face_cascade.detectMultiScale(
-            gray, scaleFactor=1.2, minNeighbors=3, minSize=(25, 25)
+            gray, scaleFactor=1.1, minNeighbors=3, minSize=(25, 25)
         )
         if len(frontal) > 0:
             return jsonify({"focused": True, "reason": "frontal"})
 
-        profile_right = profile_cascade.detectMultiScale(
-            gray, scaleFactor=1.2, minNeighbors=3, minSize=(25, 25)
-        )
-        if len(profile_right) > 0:
-            return jsonify({"focused": False, "reason": "sideways_right"})
+        # ─── 3. وجه جانبي = تشتت ❌ ───────────────────────────────────────────
+        if detect_sideways(gray):
+            return jsonify({"focused": False, "reason": "sideways"})
 
-        flipped      = cv2.flip(gray, 1)
-        profile_left = profile_cascade.detectMultiScale(
-            flipped, scaleFactor=1.2, minNeighbors=3, minSize=(25, 25)
-        )
-        if len(profile_left) > 0:
-            return jsonify({"focused": False, "reason": "sideways_left"})
-
+        # ─── 4. مفيش وجه = بيبص للأسفل = مركّز ✅ ────────────────────────────
         return jsonify({"focused": True, "reason": "looking_down"})
 
     except Exception as e:
