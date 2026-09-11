@@ -57,7 +57,7 @@ window.addEventListener('load', () => {
 
     // ─── زرار "أنا مركّز" ────────────────────────────────────────────────────
     const focusedBtn = document.createElement('button');
-    focusedBtn.innerText = '✅ أنا مركّز يا عم';
+    focusedBtn.innerText = '✅ I am Focused';
     focusedBtn.style.cssText = [
         'display:none',
         'position:absolute',
