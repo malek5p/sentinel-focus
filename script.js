@@ -20,7 +20,33 @@ window.addEventListener('load', () => {
     const themeToggle      = document.getElementById('theme-toggle');
 
     const BACKEND_URL   = '/detect_face';
-    const FETCH_TIMEOUT = 5000;
+    const HEALTH_URL    = '/health';
+    const FETCH_TIMEOUT = 8000;   // وقت أطول شوية لأن Render بطيء أحياناً
+
+    let serverAwake = false;
+
+    // ─── تصحية السيرفر أول ما الصفحة تفتح — قبل ما نضغط START أصلاً ────────
+    // Render المجاني بينام بعد فترة عدم استخدام، وأول request بعد النوم
+    // بتاخد لحد 50 ثانية. بنعمل ping هنا عشان يصحى بدري.
+    function wakeUpServer() {
+        setStatus('⏳ جاري تجهيز السيرفر...', '#FFD580');
+        fetch(HEALTH_URL)
+            .then(res => res.json())
+            .then(() => {
+                serverAwake = true;
+                setStatus('✅ السيرفر جاهز — اضغط Start', '#90EE90');
+            })
+            .catch(() => {
+                // لو فشل أول مرة، حاول تاني بعد 3 ثواني
+                setTimeout(wakeUpServer, 3000);
+            });
+    }
+    wakeUpServer();
+
+    // ping كل 4 دقايق طول ما المستخدم فاتح الصفحة — يمنع السيرفر ينام تاني
+    setInterval(() => {
+        fetch(HEALTH_URL).catch(() => {});
+    }, 4 * 60 * 1000);
 
     // ─── Dark Mode ────────────────────────────────────────────────────────────
     if (localStorage.getItem('sentinel-theme') === 'dark') {
@@ -52,7 +78,7 @@ window.addEventListener('load', () => {
 
     // ─── زرار أنا مركّز ───────────────────────────────────────────────────────
     const focusedBtn = document.createElement('button');
-    focusedBtn.innerText = '✅ أنا مركّز يا عم';
+    focusedBtn.innerText = '✅ I am focused';
     focusedBtn.style.cssText = 'display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;padding:14px 28px;font-size:1.1rem;font-weight:bold;background:#1a472a;color:#90EE90;border:2px solid #90EE90;border-radius:10px;cursor:pointer;box-shadow:0 0 18px rgba(144,238,144,0.45);white-space:nowrap;';
     cameraBox.appendChild(focusedBtn);
 
@@ -336,6 +362,14 @@ window.addEventListener('load', () => {
 
     startBtn.addEventListener('click', () => {
         if (!sessionActive) {
+
+            // ─── لو السيرفر لسه بيصحى، امنع البدء وورّي رسالة واضحة ─────────
+            if (!serverAwake) {
+                setStatus('⏳ السيرفر لسه بيصحى... حاول تاني بعد شوية', '#FFD580');
+                wakeUpServer();
+                return;
+            }
+
             // ← إنشاء AudioContext هنا مباشرة في لحظة الـ click عشان HTTPS
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             audioCtx.resume();
