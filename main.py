@@ -85,6 +85,12 @@ def detect_phone(gray):
     return False
 
 
+@app.route("/health")
+def health():
+    # endpoint خفيف جداً — بس عشان نصحّي السيرفر بسرعة
+    return jsonify({"status": "awake"})
+
+
 @app.route("/")
 def index():
     return send_from_directory(BASE_DIR, "index.html")
