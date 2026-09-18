@@ -78,7 +78,7 @@ window.addEventListener('load', () => {
 
     // ─── زرار أنا مركّز ───────────────────────────────────────────────────────
     const focusedBtn = document.createElement('button');
-    focusedBtn.innerText = '✅ أنا مركّز يا عم';
+    focusedBtn.innerText = '✅ أنا مركّز ';
     focusedBtn.style.cssText = 'display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;padding:14px 28px;font-size:1.1rem;font-weight:bold;background:#1a472a;color:#90EE90;border:2px solid #90EE90;border-radius:10px;cursor:pointer;box-shadow:0 0 18px rgba(144,238,144,0.45);white-space:nowrap;';
     cameraBox.appendChild(focusedBtn);
 
@@ -95,6 +95,7 @@ window.addEventListener('load', () => {
     // ─── متغيرات ──────────────────────────────────────────────────────────────
     let sessionActive = false, sessionPaused = false;
     let intervalId = null, localStream = null, audioCtx = null;
+    let isStarting = false;   // ← يمنع الضغط المزدوج على START
     let isFetching = false, lastFocused = true, lastReason = '';
     let framesSeen = 0, framesTotal = 0, detectionHistory = [];
     let sessionStartTime = null, isAlertActive = false, alarmIntervalId = null;
@@ -103,11 +104,11 @@ window.addEventListener('load', () => {
     let WORK_TIME = 25 * 60, BREAK_TIME = 5 * 60;
 
     // ← منطق جديد أبسط: عداد ثواني متتالية بدل نافذة معقدة
-    const DISTRACTION_THRESHOLD = 4;  // 4 ثواني تشتت متتالية = إنذار فوري
+    const DISTRACTION_THRESHOLD = 3;  // 4 ثواني تشتت متتالية = إنذار فوري
     const GRACE_PERIOD = 3;
     let consecutiveDistracted = 0;
     let consecutiveFocused    = 0;
-    const RETURN_THRESHOLD = 2;  // ثانيتين تركيز متتالية = يوقف الإنذار
+    const RETURN_THRESHOLD = 1.5;  // ثانيتين تركيز متتالية = يوقف الإنذار
 
     const pad       = n => String(n).padStart(2, '0');
     const formatHMS = s => `${pad(Math.floor(s/3600))}:${pad(Math.floor((s%3600)/60))}:${pad(s%60)}`;
@@ -374,6 +375,9 @@ window.addEventListener('load', () => {
     startBtn.addEventListener('click', () => {
         if (!sessionActive) {
 
+            // ← منع الضغط المزدوج/المتكرر قبل ما العملية تخلص
+            if (isStarting) return;
+
             // ─── لو السيرفر لسه بيصحى، امنع البدء وورّي رسالة واضحة ─────────
             if (!serverAwake) {
                 setStatus('⏳ السيرفر لسه بيصحى... حاول تاني بعد شوية', '#FFD580');
@@ -381,42 +385,68 @@ window.addEventListener('load', () => {
                 return;
             }
 
+            isStarting = true;
+
             // ← إنشاء AudioContext هنا مباشرة في لحظة الـ click عشان HTTPS
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            audioCtx.resume();
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                audioCtx.resume();
+            } catch (err) {
+                console.error('AudioContext error:', err);
+                setStatus('❌ خطأ صوت: ' + err.message, '#FF4444');
+                isStarting = false;
+                return;
+            }
 
             navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
                 .then(stream => {
-                    localStream = stream;
-                    videoElement.srcObject = stream;
-                    videoElement.play();
+                    try {
+                        localStream = stream;
+                        videoElement.srcObject = stream;
+                        videoElement.play();
 
-                    pomodoroMode = pomodoroToggle.checked;
-                    if (pomodoroMode) {
-                        loadPreset();
-                        pomodoroPhase = 'work'; pomodoroLeft = WORK_TIME;
-                        timerElement.innerText = formatMM(WORK_TIME);
-                        pomodoroLabel.style.display = 'block';
-                        pomodoroLabel.innerText = '💪 WORK';
-                        pomodoroLabel.style.color = 'var(--text-main)';
-                    } else {
-                        pomodoroPhase = 'work'; timerElement.innerText = '00:00:00';
+                        pomodoroMode = pomodoroToggle.checked;
+                        if (pomodoroMode) {
+                            loadPreset();
+                            pomodoroPhase = 'work'; pomodoroLeft = WORK_TIME;
+                            timerElement.innerText = formatMM(WORK_TIME);
+                            pomodoroLabel.style.display = 'block';
+                            pomodoroLabel.innerText = '💪 WORK';
+                            pomodoroLabel.style.color = 'var(--text-main)';
+                        } else {
+                            pomodoroPhase = 'work'; timerElement.innerText = '00:00:00';
+                        }
+
+                        sessionActive = true; sessionPaused = false;
+                        if (sessionSummary) sessionSummary.style.display = 'none';
+                        segmentSeconds = 0; segmentDistracts = 0;
+                        statDistractions.innerText = '0';
+                        resetDetection();
+
+                        // لو كان فيه interval قديم شغّال من قبل، نوقفه أول حاجة
+                        if (intervalId) clearInterval(intervalId);
+                        intervalId = setInterval(updateTimer, 1000);
+
+                        startBtn.innerText = 'END SESSION';
+                        pauseBtn.style.display = 'inline-block';
+                        pomodoroToggle.disabled = true; pomodoroPreset.disabled = true;
+                        if (placeholderText) placeholderText.style.display = 'none';
+                        setStatus('Sentinel: Initializing...', '#FFD580');
+
+                    } catch (err) {
+                        // ← لو حصل أي error هنا هيظهر على الشاشة مباشرة بدل ما يتوقف بصمت
+                        console.error('Session start error:', err);
+                        setStatus('❌ خطأ: ' + err.message, '#FF4444');
+                    } finally {
+                        isStarting = false;
                     }
-
-                    sessionActive = true; sessionPaused = false;
-                    if (sessionSummary) sessionSummary.style.display = 'none';
-                    segmentSeconds = 0; segmentDistracts = 0;
-                    statDistractions.innerText = '0';
-                    resetDetection();
-
-                    intervalId = setInterval(updateTimer, 1000);
-                    startBtn.innerText = 'END SESSION';
-                    pauseBtn.style.display = 'inline-block';
-                    pomodoroToggle.disabled = true; pomodoroPreset.disabled = true;
-                    if (placeholderText) placeholderText.style.display = 'none';
-                    setStatus('Sentinel: Initializing...', '#FFD580');
                 })
-                .catch(() => alert('يرجى السماح بالوصول إلى الكاميرا.'));
+                .catch((err) => {
+                    console.error('Camera error:', err);
+                    setStatus('❌ الكاميرا مرفوضة أو فشلت', '#FF4444');
+                    alert('يرجى السماح بالوصول إلى الكاميرا.');
+                    isStarting = false;
+                });
 
         } else {
             sessionActive = false; clearInterval(intervalId);
