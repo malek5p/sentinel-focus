@@ -105,6 +105,8 @@ window.addEventListener('load', () => {
 
     // ← منطق جديد أبسط: عداد ثواني متتالية بدل نافذة معقدة
     const DISTRACTION_THRESHOLD = 3;  // 4 ثواني تشتت متتالية = إنذار فوري
+    const WINDOW_SECS = 5;
+    
     const GRACE_PERIOD = 3;
     let consecutiveDistracted = 0;
     let consecutiveFocused    = 0;
