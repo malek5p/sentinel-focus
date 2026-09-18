@@ -78,7 +78,7 @@ window.addEventListener('load', () => {
 
     // ─── زرار أنا مركّز ───────────────────────────────────────────────────────
     const focusedBtn = document.createElement('button');
-    focusedBtn.innerText = '✅ I am focused';
+    focusedBtn.innerText = '✅ أنا مركّز يا عم';
     focusedBtn.style.cssText = 'display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;padding:14px 28px;font-size:1.1rem;font-weight:bold;background:#1a472a;color:#90EE90;border:2px solid #90EE90;border-radius:10px;cursor:pointer;box-shadow:0 0 18px rgba(144,238,144,0.45);white-space:nowrap;';
     cameraBox.appendChild(focusedBtn);
 
@@ -102,9 +102,12 @@ window.addEventListener('load', () => {
     let pomodoroMode = false, pomodoroPhase = 'work', pomodoroLeft = 0;
     let WORK_TIME = 25 * 60, BREAK_TIME = 5 * 60;
 
-    const WINDOW_SECS  = 12;
-    const ABSENT_RATIO = 0.75;
+    // ← منطق جديد أبسط: عداد ثواني متتالية بدل نافذة معقدة
+    const DISTRACTION_THRESHOLD = 4;  // 4 ثواني تشتت متتالية = إنذار فوري
     const GRACE_PERIOD = 3;
+    let consecutiveDistracted = 0;
+    let consecutiveFocused    = 0;
+    const RETURN_THRESHOLD = 2;  // ثانيتين تركيز متتالية = يوقف الإنذار
 
     const pad       = n => String(n).padStart(2, '0');
     const formatHMS = s => `${pad(Math.floor(s/3600))}:${pad(Math.floor((s%3600)/60))}:${pad(s%60)}`;
@@ -264,6 +267,7 @@ window.addEventListener('load', () => {
         if (!sessionActive || sessionPaused) return;
         if (pomodoroMode && pomodoroPhase === 'break') {
             framesSeen = framesTotal = 0;
+            consecutiveDistracted = 0; consecutiveFocused = 0;
             if (isAlertActive) stopAlarm();
             cameraBox.style.outline = 'none';
             return;
@@ -280,26 +284,33 @@ window.addEventListener('load', () => {
         const focusedThisSec = (framesSeen / framesTotal) >= 0.20;
         framesSeen = framesTotal = 0;
 
-        detectionHistory.push(focusedThisSec);
-        if (detectionHistory.length > WINDOW_SECS) detectionHistory.shift();
-        if (detectionHistory.length < WINDOW_SECS) return;
+        if (focusedThisSec) {
+            // ← مركّز: صفّر عداد التشتت، وزوّد عداد الرجوع للتركيز
+            consecutiveDistracted = 0;
+            consecutiveFocused++;
 
-        const distractedRatio = 1-(detectionHistory.filter(Boolean).length/WINDOW_SECS);
-
-        if (distractedRatio >= ABSENT_RATIO) {
-            if (!isAlertActive) startAlarm(lastReason);
-            if (lastReason === 'phone') {
-                setStatus('📱 ضع التليفون جانباً!', '#FF6B00');
-                cameraBox.style.outline = '3px solid #FF6B00';
-            } else {
-                setStatus('⚠ تشتت! ارجع للمذاكرة!', '#FF4444');
-                cameraBox.style.outline = '3px solid #FF4444';
+            if (isAlertActive && consecutiveFocused >= RETURN_THRESHOLD) {
+                stopAlarm();
+                playFocusReturnChime();
+            }
+            if (!isAlertActive) {
+                setStatusByReason(lastReason);
+                cameraBox.style.outline = 'none';
             }
         } else {
-            if (isAlertActive) { stopAlarm(); playFocusReturnChime(); }
-            if (!lastReason.includes('sideways') && lastReason !== 'phone')
-                setStatusByReason(lastReason);
-            cameraBox.style.outline = 'none';
+            // ← مشتت: زوّد عداد التشتت المتتالي
+            consecutiveDistracted++;
+            consecutiveFocused = 0;
+
+            // عرض الحالة فوراً حتى قبل ما يوصل للـ threshold
+            setStatusByReason(lastReason);
+            cameraBox.style.outline = lastReason === 'phone'
+                ? '3px solid #FF6B00' : '3px solid #FF4444';
+
+            // ← بعد 4 ثواني متتالية بس — إنذار فوري وعداد يزيد مرة واحدة
+            if (consecutiveDistracted >= DISTRACTION_THRESHOLD && !isAlertActive) {
+                startAlarm(lastReason);
+            }
         }
     }
 
