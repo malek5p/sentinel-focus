@@ -104,7 +104,7 @@ window.addEventListener('load', () => {
     let WORK_TIME = 25 * 60, BREAK_TIME = 5 * 60;
 
     // ← منطق جديد أبسط: عداد ثواني متتالية بدل نافذة معقدة
-    const DISTRACTION_THRESHOLD = 3;  // 4 ثواني تشتت متتالية = إنذار فوري
+    const DISTRACTION_THRESHOLD = 2.2;  // 4 ثواني تشتت متتالية = إنذار فوري
     const WINDOW_SECS = 5;
     
     const GRACE_PERIOD = 3;
@@ -115,7 +115,7 @@ window.addEventListener('load', () => {
     const pad       = n => String(n).padStart(2, '0');
     const formatHMS = s => `${pad(Math.floor(s/3600))}:${pad(Math.floor((s%3600)/60))}:${pad(s%60)}`;
     const formatMM  = s => `${pad(Math.floor(s/60))}:${pad(s%60)}`;
-    const calcScore = (s, d) => s === 0 ? 100 : Math.max(0, Math.round(100-(d/(s/3600))*10));
+    const calcScore = (s, d) => s === 0 ? 100 : Math.max(0, 100 - (d * 5));
 
     function setStatus(msg, color) {
         if (statusText) { statusText.innerText = msg; statusText.style.color = color || '#FAF6F0'; }
